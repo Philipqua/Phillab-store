@@ -2,7 +2,7 @@
  * Pages Function: /api/cj-products
  *
  * Fetches live products and prices from CJdropshipping.
- * Requires two secrets:
+ * Secrets required:
  *   - CJ_API_KEY  (your CJ API key)
  *   - CJ_EMAIL    (your CJ account email)
  *
@@ -50,17 +50,32 @@ async function getProducts(apiKey, email) {
 
   const accessToken = await getAccessToken(apiKey, email);
 
-  const res = await fetch(`${CJ_BASE}/product/listV2`, {
-    method: "GET",
-    headers: {
-      "CJ-Access-Token": accessToken,
-      "Content-Type": "application/json",
-    },
-  });
+  // CJ allows 1 request per second. Retry up to 3 times with delay.
+  let res;
+  let attempt = 0;
+  const maxAttempts = 3;
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`CJ product list failed (${res.status}): ${errText}`);
+  while (attempt < maxAttempts) {
+    res = await fetch(`${CJ_BASE}/product/listV2`, {
+      method: "GET",
+      headers: {
+        "CJ-Access-Token": accessToken,
+        "Content-Type": "application/json",
+      },
+    });
+
+    if (res.ok) break;
+
+    // Check if it's a rate limit error
+    const body = await res.json();
+    if (body?.message?.includes("Too Many Requests") && attempt < maxAttempts - 1) {
+      // Wait 1.5 seconds before retrying
+      await new Promise((r) => setTimeout(r, 1500));
+      attempt++;
+      continue;
+    }
+
+    throw new Error(`CJ product list failed (${res.status}): ${JSON.stringify(body)}`);
   }
 
   const data = await res.json();
