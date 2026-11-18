@@ -1,6 +1,6 @@
 /**
- * DEBUG VERSION: /api/cj-products
- * This version returns the full CJ response if the token is not found.
+ * UPDATED VERSION: /api/cj-products
+ * Tries both 'apiKey' and 'api_key' formats to be safe.
  */
 
 const CJ_BASE = "https://developers.cjdropshipping.com/api2.0/v1";
@@ -10,24 +10,38 @@ async function getAccessToken(apiKey) {
   const now = Date.now();
   if (cached.token && cached.expires > now) return cached.token;
 
-  const res = await fetch(`${CJ_BASE}/authentication/getAccessToken`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ apiKey }),
-  });
+  // We try both common naming conventions for the JSON body
+  const payloads = [
+    { apiKey: apiKey },
+    { api_key: apiKey }
+  ];
 
-  if (!res.ok) {
-    const errText = await res.text();
-    throw new Error(`CJ auth failed (${res.status}): ${errText}`);
+  let lastError = null;
+  let res;
+
+  for (const payload of payloads) {
+    try {
+      res = await fetch(`${CJ_BASE}/authentication/getAccessToken`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      
+      if (res.ok) break; // Success!
+    } catch (e) {
+      lastError = e;
+    }
+  }
+
+  if (!res || !res.ok) {
+    const errText = res ? await res.text() : (lastError?.message || "Unknown error");
+    throw new Error(`CJ auth failed: ${errText}`);
   }
 
   const data = await res.json();
-
-  // Try multiple common paths for the token
-  const token = data?.data?.accessToken || data?.accessToken || data?.token || data?.data?.token;
+  const token = data?.data?.accessToken || data?.accessToken;
 
   if (!token) {
-    // Instead of just throwing, we throw a special error containing the full response
     const error = new Error("TOKEN_NOT_FOUND");
     error.fullResponse = data; 
     throw error;
@@ -57,7 +71,7 @@ async function getProducts(apiKey) {
 
   if (!res.ok) {
     const errText = await res.text();
-    throw new Error(`CJ product list failed (${res.status}): ${errText}`);
+    throw new Error(`CJ product list failed: ${errText}`);
   }
 
   const data = await res.json();
@@ -68,7 +82,6 @@ async function getProducts(apiKey) {
 
 export async function onRequestGet(context) {
   const apiKey = context.env.CJ_API_KEY;
-
   if (!apiKey) {
     return new Response(JSON.stringify({ error: "CJ_API_KEY secret is not configured." }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
@@ -83,21 +96,13 @@ export async function onRequestGet(context) {
       },
     });
   } catch (err) {
-    // If it's our special token error, return the full CJ response so we can see it
     if (err.message === "TOKEN_NOT_FOUND") {
       return new Response(JSON.stringify({ 
         debug_message: "Could not find token in expected path. Here is the full response from CJ:",
         cj_response: err.fullResponse 
-      }), { 
-        status: 200, // We use 200 so you can actually read it in the browser
-        headers: { "Content-Type": "application/json" } 
-      });
+      }), { status: 200, headers: { "Content-Type": "application/json" } });
     }
-
-    return new Response(JSON.stringify({ error: "Function Error", detail: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" },
-    });
+    return new Response(JSON.stringify({ error: "Function Error", detail: err.message }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
 }
 
