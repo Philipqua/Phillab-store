@@ -2,9 +2,8 @@
  * Pages Function: /api/cj-products
  *
  * Fetches live products and prices from CJdropshipping.
- * Secrets required:
- *   - CJ_API_KEY  (your CJ API key)
- *   - CJ_EMAIL    (your CJ account email)
+ * Secret required:
+ *   - CJ_API_KEY (your CJ API key)
  *
  * Route: GET /api/cj-products
  */
@@ -12,43 +11,50 @@
 const CJ_BASE = "https://developers.cjdropshipping.com/api2.0/v1";
 let cached = { token: null, expires: 0, products: null, productsExpires: 0 };
 
-async function getAccessToken(apiKey, email) {
+async function getAccessToken(apiKey) {
   const now = Date.now();
   if (cached.token && cached.expires > now) return cached.token;
 
   const res = await fetch(`${CJ_BASE}/authentication/getAccessToken`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ email, apiKey }),
+    body: JSON.stringify({ apiKey }),
   });
 
-  if (!res.ok) {
+  let data;
+  try {
+    data = await res.json();
+  } catch {
     const errText = await res.text();
-    throw new Error(`CJ auth failed (${res.status}): ${errText}`);
+    throw new Error(`CJ auth failed (${res.status}): ${errText || "Invalid JSON response"}`);
   }
 
-  const data = await res.json();
+  if (!res.ok || data?.success === false || data?.result === false) {
+    throw new Error(`CJ auth failed (${res.status}): ${data?.message || JSON.stringify(data)}`);
+  }
+
   const token = data?.data?.accessToken || data?.accessToken || data?.token;
 
   if (!token) {
-    const error = new Error("TOKEN_NOT_FOUND");
-    error.fullResponse = data;
-    throw error;
+    throw new Error(`CJ returned no access token: ${JSON.stringify(data)}`);
   }
 
   const expireTime = data?.data?.expireTime || data?.expireTime;
-  const ttlMs = expireTime ? new Date(expireTime).getTime() - now : 55 * 60 * 1000;
+  const ttlMs = expireTime
+    ? new Date(expireTime).getTime() - now
+    : 55 * 60 * 1000;
+
   cached.token = token;
   cached.expires = now + Math.max(ttlMs, 60_000);
 
   return token;
 }
 
-async function getProducts(apiKey, email) {
+async function getProducts(apiKey) {
   const now = Date.now();
   if (cached.products && cached.productsExpires > now) return cached.products;
 
-  const accessToken = await getAccessToken(apiKey, email);
+  const accessToken = await getAccessToken(apiKey);
 
   // CJ allows 1 request per second. Retry up to 3 times with delay.
   let res;
@@ -66,11 +72,9 @@ async function getProducts(apiKey, email) {
 
     if (res.ok) break;
 
-    // Check if it's a rate limit error
     const body = await res.json();
     if (body?.message?.includes("Too Many Requests") && attempt < maxAttempts - 1) {
-      // Wait 1.5 seconds before retrying
-      await new Promise((r) => setTimeout(r, 1500));
+      await new Promise((resolve) => setTimeout(resolve, 1500));
       attempt++;
       continue;
     }
@@ -86,17 +90,16 @@ async function getProducts(apiKey, email) {
 
 export async function onRequestGet(context) {
   const apiKey = context.env.CJ_API_KEY;
-  const email = context.env.CJ_EMAIL;
 
-  if (!apiKey || !email) {
+  if (!apiKey) {
     return new Response(
-      JSON.stringify({ error: "Missing CJ_API_KEY or CJ_EMAIL secret." }),
+      JSON.stringify({ error: "CJ_API_KEY secret is not configured." }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
 
   try {
-    const products = await getProducts(apiKey, email);
+    const products = await getProducts(apiKey);
     return new Response(JSON.stringify(products), {
       status: 200,
       headers: {
@@ -107,18 +110,12 @@ export async function onRequestGet(context) {
       },
     });
   } catch (err) {
-    if (err.message === "TOKEN_NOT_FOUND") {
-      return new Response(
-        JSON.stringify({
-          debug_message: "Could not find token. Full CJ response:",
-          cj_response: err.fullResponse,
-        }),
-        { status: 200, headers: { "Content-Type": "application/json" } }
-      );
-    }
     return new Response(
-      JSON.stringify({ error: "Function Error", detail: err.message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: "CJ authentication or product request failed",
+        detail: err.message,
+      }),
+      { status: 502, headers: { "Content-Type": "application/json" } }
     );
   }
 }
