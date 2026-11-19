@@ -548,7 +548,7 @@
   <script>
     // ===== Product Data =====
     // Replace these with your CJ Dropshipping products
-    const PRODUCTS = [
+    let PRODUCTS = [
       {id:1, name:"Wireless Bluetooth Earbuds Pro", category:"Electronics", price:29.99, oldPrice:59.99, rating:4.6, reviews:1283, badge:"sale", img:"https://images.unsplash.com/photo-1590658268037-6bf12165a8df?w=400&q=80", desc:"Premium wireless earbuds with active noise cancellation, 30-hour battery life, and IPX5 water resistance. Perfect for music, calls, and workouts.", features:["Active Noise Cancellation","30-hour battery life","IPX5 water resistant","Bluetooth 5.3","USB-C fast charging"]},
       {id:2, name:"Smart Fitness Watch Ultra", category:"Electronics", price:39.99, oldPrice:79.99, rating:4.5, reviews:856, badge:"sale", img:"https://images.unsplash.com/photo-1546868871-7041f09a537?w=400&q=80", desc:"Track your fitness goals with heart rate monitoring, sleep tracking, 20+ sport modes, and a 7-day battery life. Compatible with iOS and Android.", features:["Heart rate & SpO2 monitoring","20+ sport modes","7-day battery life","1.8\" AMOLED display","5ATM water resistant"]},
       {id:3, name:"Minimalist Leather Backpack", category:"Fashion", price:44.99, oldPrice:89.99, rating:4.8, reviews:432, badge:"sale", img:"https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&q=80", desc:"Handcrafted vegan leather backpack with a 15\" laptop compartment, USB charging port, and anti-theft design. Perfect for work and travel.", features:["Vegan leather construction","15\" laptop compartment","Built-in USB charging port","Anti-theft back pocket","Water-resistant"]},
@@ -892,6 +892,35 @@
     // ===== Init =====
     renderProducts();
     updateCartUI();
-  </script>
+ // ===== Load live products from CJ Dropshipping =====
+(async function() {
+  try {
+    const res = await fetch('/api/cj-products?page=1&pageSize=10');
+    const data = await res.json();
+    if (data.error) {
+      console.error('CJ API error:', data.error);
+      return;
+    }
+    if (data.products && data.products.length > 0) {
+      PRODUCTS = data.products.map((p, i) => ({
+        id: i + 1,
+        name: p.name || 'Unnamed Product',
+        category: 'General',
+        price: parseFloat(p.price) || 0,
+        oldPrice: null,
+        rating: 5.0,
+        reviews: 0,
+        badge: 'new',
+        img: p.image || '',
+        desc: 'Quality product from CJ Dropshipping. Fast shipping worldwide.',
+        features: ['Fast shipping', 'Quality guaranteed', '30-day returns']
+      }));
+      renderProducts();
+    }
+  } catch (e) {
+    console.error('Failed to load CJ products:', e);
+  }
+})();
+ </script>
 </body>
 </html>
