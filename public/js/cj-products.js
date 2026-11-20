@@ -1,170 +1,91 @@
-/**
- * CJ Products Loader
- * Fetches and displays live CJdropshipping products on phillab.store
- *
- * Usage in your HTML:
- *   <div id="cj-products"></div>
- *   <div id="cj-pagination"></div>
- *   <script src="/js/cj-products.js"></script>
- */
-
 (function () {
   let currentPage = 1;
+  let currentCategoryId = null;
   const pageSize = 10;
   let totalPages = 1;
 
   const productsContainer = document.getElementById("cj-products");
   const paginationContainer = document.getElementById("cj-pagination");
+  const categoryContainer = document.querySelector(".categories");
 
-  if (!productsContainer) {
-    console.warn("CJ Products: #cj-products container not found in the DOM.");
-    return;
-  }
+  async function loadProducts(page = 1, categoryId = null) {
+    currentPage = page;
+    currentCategoryId = categoryId;
+    
+    productsContainer.innerHTML = '<p style="text-align:center; width:100%;">Loading products...</p>';
+    
+    try {
+      const url = `/api/cj-products?page=${page}&pageSize=${pageSize}${categoryId ? `&categoryId=${categoryId}` : ''}`;
+      const res = await fetch(url);
+      const data = await res.json();
 
-  function formatPrice(price) {
-    if (!price) return "N/A";
-    return "$" + parseFloat(price).toFixed(2);
+      if (data.error) throw new Error(data.error);
+
+      totalPages = data.totalPages;
+      renderProducts(data.products);
+      renderPagination();
+      updateCategoryButtons(data.products); // Dynamically build category list
+    } catch (err) {
+      productsContainer.innerHTML = `<p style="color:red;">Error: ${err.message}</p>`;
+    }
   }
 
   function renderProducts(products) {
-    if (!products || products.length === 0) {
-      productsContainer.innerHTML = "<p>No products found.</p>";
-      return;
-    }
-
-    productsContainer.innerHTML = products
-      .map(
-        (p) => `
-        <div class="cj-product-card" style="
-          border: 1px solid #e2e8f0;
-          border-radius: 12px;
-          overflow: hidden;
-          max-width: 250px;
-          display: flex;
-          flex-direction: column;
-          background: #fff;
-          transition: box-shadow 0.2s;
-        "
-        onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'"
-        onmouseout="this.style.boxShadow='none'"
-        >
-          <img
-            src="${p.image || ""}"
-            alt="${p.name || "Product"}"
-            style="width:100%; height:200px; object-fit:cover;"
-            loading="lazy"
-            onerror="this.src='https://via.placeholder.com/250x200?text=No+Image'"
-          />
-          <div style="padding:12px;">
-            <h3 style="
-              font-size:14px;
-              font-weight:600;
-              margin:0 0 8px 0;
-              color:#1a202c;
-              line-height:1.3;
-              display:-webkit-box;
-              -webkit-line-clamp:2;
-              -webkit-box-orient:vertical;
-              overflow:hidden;
-            ">${p.name || "Unnamed Product"}</h3>
-            <p style="font-size:16px; font-weight:700; color:#2b6cb0; margin:0 0 4px 0;">
-              ${formatPrice(p.price)}
-            </p>
-            <p style="font-size:12px; color:#718096; margin:0;">
-              SKU: ${p.sku || "N/A"} · In stock: ${p.inventory || 0}
-            </p>
-          </div>
-        </div>`
-      )
-      .join("");
+    productsContainer.innerHTML = products.map(p => `
+      <div class="product-card" style="background:var(--bg-card); border-radius:var(--radius); overflow:hidden; border:1px solid var(--border);">
+        <div class="product-img-wrap"><img src="${p.image}" loading="lazy"></div>
+        <div class="product-info" style="padding:12px;">
+          <h3 style="font-size:0.9rem; margin-bottom:8px;">${p.name}</h3>
+          <div style="font-weight:bold; color:var(--accent-light); font-size:1.1rem;">$${parseFloat(p.price).toFixed(2)}</div>
+          <div style="font-size:0.8rem; color:var(--text-muted);">SKU: ${p.sku}</div>
+        </div>
+      </div>
+    `).join('');
   }
 
   function renderPagination() {
     if (!paginationContainer) return;
-
     paginationContainer.innerHTML = `
-      <div style="display:flex; align-items:center; justify-content:center; gap:12px; margin-top:24px;">
-        <button
-          id="cj-prev"
-          ${currentPage <= 1 ? "disabled" : ""}
-          style="
-            padding:8px 16px;
-            border-radius:8px;
-            border:1px solid #cbd5e0;
-            background:${currentPage <= 1 ? "#f7fafc" : "#fff"};
-            color:${currentPage <= 1 ? "#a0aec0" : "#2d3748"};
-            cursor:${currentPage <= 1 ? "not-allowed" : "pointer"};
-            font-size:14px;
-          "
-        >← Previous</button>
-
-        <span style="font-size:14px; color:#4a5568;">
-          Page ${currentPage} of ${totalPages}
-        </span>
-
-        <button
-          id="cj-next"
-          ${currentPage >= totalPages ? "disabled" : ""}
-          style="
-            padding:8px 16px;
-            border-radius:8px;
-            border:1px solid #cbd5e0;
-            background:${currentPage >= totalPages ? "#f7fafc" : "#fff"};
-            color:${currentPage >= totalPages ? "#a0aec0" : "#2d3748"};
-            cursor:${currentPage >= totalPages ? "not-allowed" : "pointer"};
-            font-size:14px;
-          "
-        >Next →</button>
+      <div style="display:flex; gap:10px; justify-content:center; margin-top:20px;">
+        <button id="prev-btn" ${currentPage === 1 ? 'disabled' : ''}>Prev</button>
+        <span>Page ${currentPage} of ${totalPages}</span>
+        <button id="next-btn" ${currentPage === totalPages ? 'disabled' : ''}>Next</button>
       </div>
     `;
+    document.getElementById('prev-btn').onclick = () => loadProducts(currentPage - 1, currentCategoryId);
+    document.getElementById('next-btn').onclick = () => loadProducts(currentPage + 1, currentCategoryId);
+  }
 
-    const prevBtn = document.getElementById("cj-prev");
-    const nextBtn = document.getElementById("cj-next");
+  function updateCategoryButtons(products) {
+    if (!categoryContainer) return;
+    // Get unique categories from current products
+    const cats = [...new Set(products.map(p => p.category).filter(Boolean))];
+    
+    // Only rebuild if we don't have buttons yet or if we are in "All" mode
+    if (categoryContainer.children.length <= 1) {
+      const allBtn = document.createElement('button');
+      allBtn.className = 'cat-btn active';
+      allBtn.innerText = 'All';
+      allBtn.onclick = () => {
+        document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+        allBtn.classList.add('active');
+        loadProducts(1, null);
+      };
+      categoryContainer.appendChild(allBtn);
 
-    if (prevBtn && currentPage > 1) {
-      prevBtn.addEventListener("click", () => {
-        currentPage--;
-        loadProducts();
-        window.scrollTo({ top: productsContainer.offsetTop - 20, behavior: "smooth" });
-      });
-    }
-
-    if (nextBtn && currentPage < totalPages) {
-      nextBtn.addEventListener("click", () => {
-        currentPage++;
-        loadProducts();
-        window.scrollTo({ top: productsContainer.offsetTop - 20, behavior: "smooth" });
+      cats.forEach(catId => {
+        const btn = document.createElement('button');
+        btn.className = 'cat-btn';
+        btn.innerText = `Cat ${catId.slice(0,4)}`; // Using ID as label for now
+        btn.onclick = () => {
+          document.querySelectorAll('.cat-btn').forEach(b => b.classList.remove('active'));
+          btn.classList.add('active');
+          loadProducts(1, catId);
+        };
+        categoryContainer.appendChild(btn);
       });
     }
   }
 
-  async function loadProducts() {
-    productsContainer.innerHTML = `
-      <div style="display:flex; justify-content:center; align-items:center; width:100%; padding:40px;">
-        <div style="font-size:16px; color:#718096;">Loading products...</div>
-      </div>
-    `;
-
-    try {
-      const res = await fetch(`/api/cj-products?page=${currentPage}&pageSize=${pageSize}`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-
-      if (data.error) throw new Error(data.detail || data.error);
-
-      totalPages = data.totalPages || 1;
-      renderProducts(data.products);
-      renderPagination();
-    } catch (err) {
-      productsContainer.innerHTML = `
-        <div style="text-align:center; padding:40px; color:#e53e3e;">
-          <p style="font-size:16px; font-weight:600;">Failed to load products</p>
-          <p style="font-size:14px;">${err.message}</p>
-        </div>
-      `;
-    }
-  }
-
-  // Load first page on init
   loadProducts();
 })();
