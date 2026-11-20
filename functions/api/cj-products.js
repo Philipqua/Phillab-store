@@ -1,12 +1,8 @@
 /**
  * Pages Function: /api/cj-products
- *
- * Fetches live products and prices from CJdropshipping with pagination.
- * Secrets required:
- *   - CJ_API_KEY  (your CJ API key)
- *   - CJ_EMAIL    (your CJ account email)
- *
- * Route: GET /api/cj-products?page=1&pageSize=10
+ * Supports Pagination and Category Filtering
+ * 
+ * Route: GET /api/cj-products?page=1&pageSize=10&categoryId=123
  */
 
 const CJ_BASE = "https://developers.cjdropshipping.com/api2.0/v1";
@@ -29,24 +25,17 @@ async function getAccessToken(apiKey, email) {
 
   const data = await res.json();
   const token = data?.data?.accessToken || data?.accessToken || data?.token;
-
-  if (!token) {
-    throw new Error(`CJ auth: no token in response: ${JSON.stringify(data)}`);
-  }
+  if (!token) throw new Error("CJ auth: no token in response");
 
   const expireTime = data?.data?.expireTime || data?.expireTime;
   const ttlMs = expireTime ? new Date(expireTime).getTime() - now : 55 * 60 * 1000;
   cached.token = token;
   cached.expires = now + Math.max(ttlMs, 60_000);
-
   return token;
 }
 
-async function getProducts(apiKey, email, page, pageSize) {
+async function getProducts(apiKey, email, page, pageSize, categoryId) {
   const accessToken = await getAccessToken(apiKey, email);
-
-  // CJ allows 1 request per second. Retry up to 3 times with delay.
-  let res;
   let attempt = 0;
   const maxAttempts = 3;
 
@@ -54,16 +43,14 @@ async function getProducts(apiKey, email, page, pageSize) {
     const url = new URL(`${CJ_BASE}/product/listV2`);
     url.searchParams.set("pageNumber", String(page));
     url.searchParams.set("pageSize", String(pageSize));
+    if (categoryId) url.searchParams.set("categoryId", categoryId);
 
-    res = await fetch(url.toString(), {
+    const res = await fetch(url.toString(), {
       method: "GET",
-      headers: {
-        "CJ-Access-Token": accessToken,
-        "Content-Type": "application/json",
-      },
+      headers: { "CJ-Access-Token": accessToken, "Content-Type": "application/json" },
     });
 
-    if (res.ok) break;
+    if (res.ok) return await res.json();
 
     const body = await res.json();
     if (body?.message?.includes("Too Many Requests") && attempt < maxAttempts - 1) {
@@ -71,78 +58,43 @@ async function getProducts(apiKey, email, page, pageSize) {
       attempt++;
       continue;
     }
-
-    throw new Error(`CJ product list failed: ${JSON.stringify(body)}`);
+    throw new Error(`CJ API Error: ${JSON.stringify(body)}`);
   }
-
-  return await res.json();
 }
 
 export async function onRequestGet(context) {
   const apiKey = context.env.CJ_API_KEY;
   const email = context.env.CJ_EMAIL;
-
-  if (!apiKey || !email) {
-    return new Response(
-      JSON.stringify({ error: "Missing CJ_API_KEY or CJ_EMAIL secret." }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
-  }
-
-  // Read pagination params from the URL (defaults: page 1, 10 per page)
   const url = new URL(context.request.url);
+
   const page = Math.max(parseInt(url.searchParams.get("page") || "1", 10), 1);
   const pageSize = Math.min(Math.max(parseInt(url.searchParams.get("pageSize") || "10", 10), 1), 50);
+  const categoryId = url.searchParams.get("categoryId");
 
   try {
-    const data = await getProducts(apiKey, email, page, pageSize);
-
-    // Return a clean response with pagination metadata
+    const data = await getProducts(apiKey, email, page, pageSize, categoryId);
     const content = data?.data?.content?.[0]?.productList || [];
-    const totalPages = data?.data?.totalPages || 1;
-    const totalRecords = data?.data?.totalRecords || 0;
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        page,
-        pageSize,
-        totalPages,
-        totalRecords,
-        products: content.map((p) => ({
-          id: p.id,
-          name: p.nameEn,
-          sku: p.sku,
-          image: p.bigImage,
-          price: p.sellPrice,
-          inventory: p.warehouseInventoryNum,
-        })),
-      }),
-      {
-        status: 200,
-        headers: {
-          "Content-Type": "application/json",
-          "Cache-Control": "public, max-age=300",
-          "Access-Control-Allow-Origin": "https://phillab.store",
-          "Access-Control-Allow-Methods": "GET, OPTIONS",
-        },
-      }
-    );
+    return new Response(JSON.stringify({
+      success: true,
+      page,
+      pageSize,
+      totalPages: data?.data?.totalPages || 1,
+      totalRecords: data?.data?.totalRecords || 0,
+      products: content.map(p => ({
+        id: p.id,
+        name: p.nameEn,
+        sku: p.sku,
+        image: p.bigImage,
+        price: p.sellPrice,
+        category: p.categoryId, // Crucial for filtering
+        inventory: p.warehouseInventoryNum
+      }))
+    }), {
+      status: 200,
+      headers: { "Content-Type": "application/json", "Access-Control-Allow-Origin": "https://phillab.store" }
+    });
   } catch (err) {
-    return new Response(
-      JSON.stringify({ error: "Function Error", detail: err.message }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: err.message }), { status: 500, headers: { "Content-Type": "application/json" } });
   }
-}
-
-export function onRequestOptions() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "https://phillab.store",
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-    },
-  });
 }
