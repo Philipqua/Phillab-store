@@ -9,79 +9,105 @@ export async function onRequestGet(context) {
 
     const appKey = context.env.ALI_APP_KEY;
     const appSecret = context.env.ALI_APP_SECRET;
+    const redirectUri = "https://phillab.store/api/ali-callback";
 
     if (!appKey || !appSecret) {
       return new Response(JSON.stringify({ error: "Missing ALI_APP_KEY or ALI_APP_SECRET" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
+        status: 500, headers: { "Content-Type": "application/json" },
       });
     }
 
-    if (!context.env.ALI_TOKENS) {
-      return new Response(JSON.stringify({ error: "KV binding ALI_TOKENS is not available" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json" },
-      });
-    }
-
-    const redirectUri = "https://phillab.store/api/ali-callback";
-
-    // Exchange the code for an access token
-    const tokenRes = await fetch("https://api-sg.aliexpress.com/oauth/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "authorization_code",
-        client_id: appKey,
-        client_secret: appSecret,
-        code: code,
-        redirect_uri: redirectUri,
-      }),
-    });
-
-    // Read as text first so we can show the raw response if it's not JSON
-    const rawText = await tokenRes.text();
-
-    let tokenData;
-    try {
-      tokenData = JSON.parse(rawText);
-    } catch (e) {
-      return new Response(
-        JSON.stringify({
-          error: "AliExpress returned a non-JSON response",
-          status: tokenRes.status,
-          raw: rawText.substring(0, 1000),
+    // Candidate token endpoints to try in order
+    const candidates = [
+      {
+        name: "rest/auth/token/create",
+        url: "https://api-sg.aliexpress.com/rest/auth/token/create",
+        method: "POST",
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: appKey,
+          client_secret: appSecret,
+          code,
+          redirect_uri: redirectUri,
         }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+        contentType: "application/x-www-form-urlencoded",
+      },
+      {
+        name: "oauth/token",
+        url: "https://api-sg.aliexpress.com/oauth/token",
+        method: "POST",
+        body: new URLSearchParams({
+          grant_type: "authorization_code",
+          client_id: appKey,
+          client_secret: appSecret,
+          code,
+          redirect_uri: redirectUri,
+        }),
+        contentType: "application/x-www-form-urlencoded",
+      },
+      {
+        name: "sync system.oauth2.getToken",
+        url: "https://api-sg.aliexpress.com/sync",
+        method: "POST",
+        body: new URLSearchParams({
+          method: "system.oauth2.getToken",
+          app_key: appKey,
+          app_secret: appSecret,
+          code,
+          redirect_uri: redirectUri,
+          sign_method: "md5",
+          timestamp: String(Date.now()),
+          format: "json",
+          v: "2.0",
+        }),
+        contentType: "application/x-www-form-urlencoded",
+      },
+    ];
+
+    const results = [];
+
+    for (const c of candidates) {
+      try {
+        const res = await fetch(c.url, {
+          method: c.method,
+          headers: { "Content-Type": c.contentType },
+          body: c.body,
+        });
+        const text = await res.text();
+        let parsed;
+        try { parsed = JSON.parse(text); } catch { parsed = text.substring(0, 300); }
+
+        results.push({ endpoint: c.name, status: res.status, response: parsed });
+
+        // If we got an access_token, save it and stop
+        const token = parsed?.access_token || parsed?.data?.access_token;
+        if (token) {
+          await context.env.ALI_TOKENS.put("access_token", token);
+          await context.env.ALI_TOKENS.put("refresh_token", parsed?.refresh_token || parsed?.data?.refresh_token || "");
+          await context.env.ALI_TOKENS.put("expires_at", String(Date.now() + (parsed?.expires_in || 3600) * 1000));
+
+          return new Response(
+            `<html><body style="font-family:sans-serif;padding:40px;">
+              <h1>✅ Connected via ${c.name}</h1>
+              <p>Tokens saved. <a href="/api/ali-products">Test products →</a></p>
+              <pre style="background:#f4f4f4;padding:16px;border-radius:8px;overflow:auto;">${JSON.stringify(results, null, 2)}</pre>
+            </body></html>`,
+            { headers: { "Content-Type": "text/html" } }
+          );
+        }
+      } catch (e) {
+        results.push({ endpoint: c.name, error: e.message });
+      }
     }
 
-    if (!tokenData.access_token) {
-      return new Response(
-        JSON.stringify({ error: "Token exchange failed", detail: tokenData }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    // Store tokens in KV
-    await context.env.ALI_TOKENS.put("access_token", tokenData.access_token);
-    await context.env.ALI_TOKENS.put("refresh_token", tokenData.refresh_token || "");
-    await context.env.ALI_TOKENS.put(
-      "expires_at",
-      String(Date.now() + (tokenData.expires_in || 3600) * 1000)
-    );
-
+    // None worked — show all results so we can see why
     return new Response(
-      `<html><body style="font-family:sans-serif;text-align:center;padding:60px;">
-        <h1>✅ AliExpress Connected!</h1>
-        <p>Your tokens have been saved.</p>
-        <p><a href="/api/ali-products">Test the product endpoint →</a></p>
-      </body></html>`,
-      { headers: { "Content-Type": "text/html" } }
+      JSON.stringify({ error: "No endpoint returned a token", attempts: results }, null, 2),
+      { status: 500, headers: { "Content-Type": "application/json" } }
     );
   } catch (err) {
     return new Response(
-      JSON.stringify({ error: "Callback crashed", detail: err.message, stack: err.stack }),
+      JSON.stringify({ error: "Callback crashed", detail: err.message }),
       { status: 500, headers: { "Content-Type": "application/json" } }
     );
   }
