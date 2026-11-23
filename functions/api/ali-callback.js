@@ -1,5 +1,5 @@
 // ---- Compact MD5 (Cloudflare Workers don't have MD5 in crypto.subtle) ----
-function md5(s) {
+function md5(input) {
   function L(k,d){return(k<<d)|(k>>>(32-d));}
   function K(G,k){var I,d,F,H,x;F=(G&2147483648);H=(k&2147483648);I=(G&1073741824);d=(k&1073741824);x=(G&1073741823)+(k&1073741823);if(I&d){return(x^2147483648^F^H);}if(I|d){if(x&1073741824){return(x^3221225472^F^H);}else{return(x^1073741824^F^H);}}else{return(x^F^H);}}
   function r(F,d,x){return(F&d)|((~F)&x);}
@@ -13,8 +13,11 @@ function md5(s) {
   function e(G){var Z;var F=G.length;var x=F+8;var k=(x-(x%64))/64;var I=(k+1)*16;var aa=Array(I-1);var d=0;var H=0;while(H<F){Z=(H-(H%4))/4;d=(H%4)*8;aa[Z]=(aa[Z]|(G.charCodeAt(H)<<d));H++;}Z=(H-(H%4))/4;d=(H%4)*8;aa[Z]=aa[Z]|(128<<d);aa[I-2]=F<<3;aa[I-1]=F>>>29;return aa;}
   function B(x){var k="",F="",G,d;for(d=0;d<=3;d++){G=(x>>>(d*8))&255;F="0"+G.toString(16);k=k+F.substr(F.length-2,2);}return k;}
   function J(k){k=k.replace(/rn/g,"n");var d="";for(var F=0;F<k.length;F++){var x=k.charCodeAt(F);if(x<128){d+=String.fromCharCode(x);}else{if((x>127)&&(x<2048)){d+=String.fromCharCode((x>>6)|192);d+=String.fromCharCode((x&63)|128);}else{d+=String.fromCharCode((x>>12)|224);d+=String.fromCharCode(((x>>6)&63)|128);d+=String.fromCharCode((x&63)|128);}}}return d;}
-  var C=Array();var P,h,E,v,g,Y,X,W,V,S=7,T=12,U=17,R=22,o=5,m=9,l=14,j=20,a=4,z=11,y=16,w=23,c=6,b=10,s=15,t=21;
-  s=J(s);C=e(s);Y=1732584193;X=4023233417;W=2562383102;V=271733878;
+  var C=Array();
+  var P,h,E,v,g,Y,X,W,V,S=7,T=12,U=17,R=22,o=5,m=9,l=14,j=20,a=4,z=11,y=16,w=23,c=6,b=10,s=15,t=21;
+  var str = J(input);          // <-- separate variable, no collision
+  C = e(str);
+  Y=1732584193;X=4023233417;W=2562383102;V=271733878;
   for(P=0;P<C.length;P+=16){h=Y;E=X;v=W;g=V;
     Y=u(Y,X,W,V,C[P+0],S,3614090360);V=u(V,Y,X,W,C[P+1],T,3905402710);W=u(W,V,Y,X,C[P+2],U,606105819);X=u(X,W,V,Y,C[P+3],R,3250441966);
     Y=u(Y,X,W,V,C[P+4],S,4118548399);V=u(V,Y,X,W,C[P+5],T,1200080426);W=u(W,V,Y,X,C[P+6],U,2821735955);X=u(X,W,V,Y,C[P+7],R,4249261313);
