@@ -17,93 +17,45 @@ export async function onRequestGet(context) {
       });
     }
 
-    // Candidate token endpoints to try in order
-    const candidates = [
-      {
-        name: "rest/auth/token/create",
-        url: "https://api-sg.aliexpress.com/rest/auth/token/create",
-        method: "POST",
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          client_id: appKey,
-          client_secret: appSecret,
-          code,
-          redirect_uri: redirectUri,
-        }),
-        contentType: "application/x-www-form-urlencoded",
-      },
-      {
-        name: "oauth/token",
-        url: "https://api-sg.aliexpress.com/oauth/token",
-        method: "POST",
-        body: new URLSearchParams({
-          grant_type: "authorization_code",
-          client_id: appKey,
-          client_secret: appSecret,
-          code,
-          redirect_uri: redirectUri,
-        }),
-        contentType: "application/x-www-form-urlencoded",
-      },
-      {
-        name: "sync system.oauth2.getToken",
-        url: "https://api-sg.aliexpress.com/sync",
-        method: "POST",
-        body: new URLSearchParams({
-          method: "system.oauth2.getToken",
-          app_key: appKey,
-          app_secret: appSecret,
-          code,
-          redirect_uri: redirectUri,
-          sign_method: "md5",
-          timestamp: String(Date.now()),
-          format: "json",
-          v: "2.0",
-        }),
-        contentType: "application/x-www-form-urlencoded",
-      },
-    ];
+    // Correct endpoint: rest/auth/token/create, with app_key / app_secret
+    const res = await fetch("https://api-sg.aliexpress.com/rest/auth/token/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        app_key: appKey,
+        app_secret: appSecret,
+        code: code,
+        redirect_uri: redirectUri,
+      }),
+    });
 
-    const results = [];
+    const text = await res.text();
+    let data;
+    try { data = JSON.parse(text); } catch { data = { raw: text.substring(0, 500) }; }
 
-    for (const c of candidates) {
-      try {
-        const res = await fetch(c.url, {
-          method: c.method,
-          headers: { "Content-Type": c.contentType },
-          body: c.body,
-        });
-        const text = await res.text();
-        let parsed;
-        try { parsed = JSON.parse(text); } catch { parsed = text.substring(0, 300); }
+    // Look for the token in common response shapes
+    const token = data?.access_token || data?.data?.access_token || data?.token;
+    const refresh = data?.refresh_token || data?.data?.refresh_token || "";
 
-        results.push({ endpoint: c.name, status: res.status, response: parsed });
-
-        // If we got an access_token, save it and stop
-        const token = parsed?.access_token || parsed?.data?.access_token;
-        if (token) {
-          await context.env.ALI_TOKENS.put("access_token", token);
-          await context.env.ALI_TOKENS.put("refresh_token", parsed?.refresh_token || parsed?.data?.refresh_token || "");
-          await context.env.ALI_TOKENS.put("expires_at", String(Date.now() + (parsed?.expires_in || 3600) * 1000));
-
-          return new Response(
-            `<html><body style="font-family:sans-serif;padding:40px;">
-              <h1>✅ Connected via ${c.name}</h1>
-              <p>Tokens saved. <a href="/api/ali-products">Test products →</a></p>
-              <pre style="background:#f4f4f4;padding:16px;border-radius:8px;overflow:auto;">${JSON.stringify(results, null, 2)}</pre>
-            </body></html>`,
-            { headers: { "Content-Type": "text/html" } }
-          );
-        }
-      } catch (e) {
-        results.push({ endpoint: c.name, error: e.message });
-      }
+    if (!token) {
+      return new Response(
+        JSON.stringify({ error: "No access_token in response", status: res.status, response: data }, null, 2),
+        { status: 500, headers: { "Content-Type": "application/json" } }
+      );
     }
 
-    // None worked — show all results so we can see why
+    await context.env.ALI_TOKENS.put("access_token", token);
+    await context.env.ALI_TOKENS.put("refresh_token", refresh);
+    await context.env.ALI_TOKENS.put("expires_at", String(Date.now() + (data?.expires_in || 3600) * 1000));
+
     return new Response(
-      JSON.stringify({ error: "No endpoint returned a token", attempts: results }, null, 2),
-      { status: 500, headers: { "Content-Type": "application/json" } }
+      `<html><body style="font-family:sans-serif;padding:40px;">
+        <h1>✅ AliExpress Connected!</h1>
+        <p>Tokens saved successfully.</p>
+        <p><a href="/api/ali-products">Test the product endpoint →</a></p>
+        <pre style="background:#f4f4f4;padding:16px;border-radius:8px;overflow:auto;">${JSON.stringify(data, null, 2)}</pre>
+      </body></html>`,
+      { headers: { "Content-Type": "text/html" } }
     );
   } catch (err) {
     return new Response(
