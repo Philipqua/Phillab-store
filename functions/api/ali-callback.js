@@ -1,45 +1,108 @@
-// ---- Compact MD5 (Cloudflare Workers don't have MD5 in crypto.subtle) ----
-function md5(input) {
-  function L(k,d){return(k<<d)|(k>>>(32-d));}
-  function K(G,k){var I,d,F,H,x;F=(G&2147483648);H=(k&2147483648);I=(G&1073741824);d=(k&1073741824);x=(G&1073741823)+(k&1073741823);if(I&d){return(x^2147483648^F^H);}if(I|d){if(x&1073741824){return(x^3221225472^F^H);}else{return(x^1073741824^F^H);}}else{return(x^F^H);}}
-  function r(F,d,x){return(F&d)|((~F)&x);}
-  function q(F,d,x){return(F&x)|(d&(~x));}
-  function p(F,d,x){return(F^d^x);}
-  function n(F,d,x){return(d^(F|(~x)));}
-  function u(G,F,aa,Z,k,H,I){G=K(G,K(K(r(F,aa,Z),k),I));return K(L(G,H),F);}
-  function C(G,F,aa,Z,k,H,I){G=K(G,K(K(q(F,aa,Z),k),I));return K(L(G,H),F);}
-  function D(G,F,aa,Z,k,H,I){G=K(G,K(K(p(F,aa,Z),k),I));return K(L(G,H),F);}
-  function A(G,F,aa,Z,k,H,I){G=K(G,K(K(n(F,aa,Z),k),I));return K(L(G,H),F);}
-  function e(G){var Z;var F=G.length;var x=F+8;var k=(x-(x%64))/64;var I=(k+1)*16;var aa=Array(I-1);var d=0;var H=0;while(H<F){Z=(H-(H%4))/4;d=(H%4)*8;aa[Z]=(aa[Z]|(G.charCodeAt(H)<<d));H++;}Z=(H-(H%4))/4;d=(H%4)*8;aa[Z]=aa[Z]|(128<<d);aa[I-2]=F<<3;aa[I-1]=F>>>29;return aa;}
-  function B(x){var k="",F="",G,d;for(d=0;d<=3;d++){G=(x>>>(d*8))&255;F="0"+G.toString(16);k=k+F.substr(F.length-2,2);}return k;}
-  function J(k){k=k.replace(/rn/g,"n");var d="";for(var F=0;F<k.length;F++){var x=k.charCodeAt(F);if(x<128){d+=String.fromCharCode(x);}else{if((x>127)&&(x<2048)){d+=String.fromCharCode((x>>6)|192);d+=String.fromCharCode((x&63)|128);}else{d+=String.fromCharCode((x>>12)|224);d+=String.fromCharCode(((x>>6)&63)|128);d+=String.fromCharCode((x&63)|128);}}}return d;}
-  var C=Array();
-  var P,h,E,v,g,Y,X,W,V,S=7,T=12,U=17,R=22,o=5,m=9,l=14,j=20,a=4,z=11,y=16,w=23,c=6,b=10,s=15,t=21;
-  var str = J(input);          // <-- separate variable, no collision
-  C = e(str);
-  Y=1732584193;X=4023233417;W=2562383102;V=271733878;
-  for(P=0;P<C.length;P+=16){h=Y;E=X;v=W;g=V;
-    Y=u(Y,X,W,V,C[P+0],S,3614090360);V=u(V,Y,X,W,C[P+1],T,3905402710);W=u(W,V,Y,X,C[P+2],U,606105819);X=u(X,W,V,Y,C[P+3],R,3250441966);
-    Y=u(Y,X,W,V,C[P+4],S,4118548399);V=u(V,Y,X,W,C[P+5],T,1200080426);W=u(W,V,Y,X,C[P+6],U,2821735955);X=u(X,W,V,Y,C[P+7],R,4249261313);
-    Y=u(Y,X,W,V,C[P+8],S,1770035416);V=u(V,Y,X,W,C[P+9],T,2336552879);W=u(W,V,Y,X,C[P+10],U,4294925233);X=u(X,W,V,Y,C[P+11],R,2304563134);
-    Y=u(Y,X,W,V,C[P+12],S,1804603682);V=u(V,Y,X,W,C[P+13],T,4254626195);W=u(W,V,Y,X,C[P+14],U,2792965006);X=u(X,W,V,Y,C[P+15],R,1236535329);
-    Y=C(Y,X,W,V,C[P+1],o,4129170786);V=C(V,Y,X,W,C[P+6],m,3225465664);W=C(W,V,Y,X,C[P+11],l,643717713);X=C(X,W,V,Y,C[P+0],j,3921069994);
-    Y=C(Y,X,W,V,C[P+5],o,3593408605);V=C(V,Y,X,W,C[P+10],m,38016083);W=C(W,V,Y,X,C[P+15],l,3634488961);X=C(X,W,V,Y,C[P+4],j,3889429448);
-    Y=C(Y,X,W,V,C[P+9],o,568446438);V=C(V,Y,X,W,C[P+14],m,3275163606);W=C(W,V,Y,X,C[P+3],l,4107603335);X=C(X,W,V,Y,C[P+8],j,1163531501);
-    Y=C(Y,X,W,V,C[P+13],o,2850285829);V=C(V,Y,X,W,C[P+2],m,4243563512);W=C(W,V,Y,X,C[P+7],l,1735328473);X=C(X,W,V,Y,C[P+12],j,2368359562);
-    Y=D(Y,X,W,V,C[P+5],a,4294588738);V=D(V,Y,X,W,C[P+8],z,2272392833);W=D(W,V,Y,X,C[P+11],y,1839030562);X=D(X,W,V,Y,C[P+14],w,4259657740);
-    Y=D(Y,X,W,V,C[P+1],a,2763975236);V=D(V,Y,X,W,C[P+4],z,1272893353);W=D(W,V,Y,X,C[P+7],y,4139469664);X=D(X,W,V,Y,C[P+10],w,3200236656);
-    Y=D(Y,X,W,V,C[P+13],a,681279174);V=D(V,Y,X,W,C[P+0],z,3936430074);W=D(W,V,Y,X,C[P+3],y,3572445317);X=D(X,W,V,Y,C[P+6],w,76029189);
-    Y=D(Y,X,W,V,C[P+9],a,3654602809);V=D(V,Y,X,W,C[P+12],z,3873151461);W=D(W,V,Y,X,C[P+15],y,530742520);X=D(X,W,V,Y,C[P+2],w,3299628645);
-    Y=A(Y,X,W,V,C[P+0],c,4096336452);V=A(V,Y,X,W,C[P+7],b,1126891415);W=A(W,V,Y,X,C[P+14],s,2878612391);X=A(X,W,V,Y,C[P+5],t,4237533241);
-    Y=A(Y,X,W,V,C[P+12],c,1700485571);V=A(V,Y,X,W,C[P+3],b,2399980690);W=A(W,V,Y,X,C[P+10],s,4293915773);X=A(X,W,V,Y,C[P+1],t,2240044497);
-    Y=A(Y,X,W,V,C[P+8],c,1873313359);V=A(V,Y,X,W,C[P+15],b,4264355552);W=A(W,V,Y,X,C[P+6],s,2734768916);X=A(X,W,V,Y,C[P+13],t,1309151649);
-    Y=A(Y,X,W,V,C[P+4],c,4149444226);V=A(V,Y,X,W,C[P+11],b,3174756917);W=A(W,V,Y,X,C[P+2],s,718787259);X=A(X,W,V,Y,C[P+9],t,3951481745);
-    Y=K(Y,h);X=K(X,E);W=K(W,v);V=K(V,g);}
-  return (B(Y)+B(X)+B(W)+B(V)).toLowerCase();
+function md5(string) {
+  function RotateLeft(lValue, iShiftBits) { return (lValue << iShiftBits) | (lValue >>> (32 - iShiftBits)); }
+  function AddUnsigned(lX, lY) {
+    var lX4, lY4, lX8, lY8, lResult;
+    lX8 = (lX & 0x80000000); lY8 = (lY & 0x80000000);
+    lX4 = (lX & 0x40000000); lY4 = (lY & 0x40000000);
+    lResult = (lX & 0x3FFFFFFF) + (lY & 0x3FFFFFFF);
+    if (lX4 & lY4) return (lResult ^ 0x80000000 ^ lX8 ^ lY8);
+    if (lX4 | lY4) { if (lResult & 0x40000000) return (lResult ^ 0xC0000000 ^ lX8 ^ lY8); else return (lResult ^ 0x40000000 ^ lX8 ^ lY8); }
+    else return (lResult ^ lX8 ^ lY8);
+  }
+  function F(x, y, z) { return (x & y) | ((~x) & z); }
+  function G(x, y, z) { return (x & z) | (y & (~z)); }
+  function H(x, y, z) { return (x ^ y ^ z); }
+  function I(x, y, z) { return (y ^ (x | (~z))); }
+  function FF(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(F(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }
+  function GG(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(G(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }
+  function HH(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(H(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }
+  function II(a, b, c, d, x, s, ac) { a = AddUnsigned(a, AddUnsigned(AddUnsigned(I(b, c, d), x), ac)); return AddUnsigned(RotateLeft(a, s), b); }
+  function ConvertToWordArray(string) {
+    var lWordCount; var lMessageLength = string.length;
+    var lNumberOfWords_temp1 = lMessageLength + 8;
+    var lNumberOfWords_temp2 = (lNumberOfWords_temp1 - (lNumberOfWords_temp1 % 64)) / 64;
+    var lNumberOfWords = (lNumberOfWords_temp2 + 1) * 16;
+    var lWordArray = Array(lNumberOfWords - 1);
+    var lBytePosition = 0; var lByteCount = 0;
+    while (lByteCount < lMessageLength) {
+      lWordCount = (lByteCount - (lByteCount % 4)) / 4;
+      lBytePosition = (lByteCount % 4) * 8;
+      lWordArray[lWordCount] = (lWordArray[lWordCount] | (string.charCodeAt(lByteCount) << lBytePosition));
+      lByteCount++;
+    }
+    lWordCount = (lByteCount - (lByteCount % 4)) / 4;
+    lBytePosition = (lByteCount % 4) * 8;
+    lWordArray[lWordCount] = lWordArray[lWordCount] | (0x80 << lBytePosition);
+    lWordArray[lNumberOfWords - 2] = lMessageLength << 3;
+    lWordArray[lNumberOfWords - 1] = lMessageLength >>> 29;
+    return lWordArray;
+  }
+  function WordToHex(lValue) {
+    var WordToHexValue = "", WordToHexValue_temp = "", lByte, lCount;
+    for (lCount = 0; lCount <= 3; lCount++) {
+      lByte = (lValue >>> (lCount * 8)) & 255;
+      WordToHexValue_temp = "0" + lByte.toString(16);
+      WordToHexValue = WordToHexValue + WordToHexValue_temp.substr(WordToHexValue_temp.length - 2, 2);
+    }
+    return WordToHexValue;
+  }
+  function Utf8Encode(string) {
+    string = string.replace(/\r\n/g, "\n");
+    var utftext = "";
+    for (var n = 0; n < string.length; n++) {
+      var c = string.charCodeAt(n);
+      if (c < 128) utftext += String.fromCharCode(c);
+      else if ((c > 127) && (c < 2048)) { utftext += String.fromCharCode((c >> 6) | 192); utftext += String.fromCharCode((c & 63) | 128); }
+      else { utftext += String.fromCharCode((c >> 12) | 224); utftext += String.fromCharCode(((c >> 6) & 63) | 128); utftext += String.fromCharCode((c & 63) | 128); }
+    }
+    return utftext;
+  }
+  var x = Array();
+  var k, AA, BB, CC, DD, a, b, c, d;
+  var S11 = 7, S12 = 12, S13 = 17, S14 = 22, S21 = 5, S22 = 9, S23 = 14, S24 = 20;
+  var S31 = 4, S32 = 11, S33 = 16, S34 = 23, S41 = 6, S42 = 10, S43 = 15, S44 = 21;
+  string = Utf8Encode(string);
+  x = ConvertToWordArray(string);
+  a = 0x67452301; b = 0xEFCDAB89; c = 0x98BADCFE; d = 0x10325476;
+  for (k = 0; k < x.length; k += 16) {
+    AA = a; BB = b; CC = c; DD = d;
+    a = FF(a, b, c, d, x[k + 0], S11, 0xD76AA478); d = FF(d, a, b, c, x[k + 1], S12, 0xE8C7B756);
+    c = FF(c, d, a, b, x[k + 2], S13, 0x242070DB); b = FF(b, c, d, a, x[k + 3], S14, 0xC1BDCEEE);
+    a = FF(a, b, c, d, x[k + 4], S11, 0xF57C0FAF); d = FF(d, a, b, c, x[k + 5], S12, 0x4787C62A);
+    c = FF(c, d, a, b, x[k + 6], S13, 0xA8304613); b = FF(b, c, d, a, x[k + 7], S14, 0xFD469501);
+    a = FF(a, b, c, d, x[k + 8], S11, 0x698098D8); d = FF(d, a, b, c, x[k + 9], S12, 0x8B44F7AF);
+    c = FF(c, d, a, b, x[k + 10], S13, 0xFFFF5BB1); b = FF(b, c, d, a, x[k + 11], S14, 0x895CD7BE);
+    a = FF(a, b, c, d, x[k + 12], S11, 0x6B901122); d = FF(d, a, b, c, x[k + 13], S12, 0xFD987193);
+    c = FF(c, d, a, b, x[k + 14], S13, 0xA679438E); b = FF(b, c, d, a, x[k + 15], S14, 0x49B40821);
+    a = GG(a, b, c, d, x[k + 1], S21, 0xF61E2562); d = GG(d, a, b, c, x[k + 6], S22, 0xC040B340);
+    c = GG(c, d, a, b, x[k + 11], S23, 0x265E5A51); b = GG(b, c, d, a, x[k + 0], S24, 0xE9B6C7AA);
+    a = GG(a, b, c, d, x[k + 5], S21, 0xD62F105D); d = GG(d, a, b, c, x[k + 10], S22, 0x02441453);
+    c = GG(c, d, a, b, x[k + 15], S23, 0xD8A1E681); b = GG(b, c, d, a, x[k + 4], S24, 0xE7D3FBC8);
+    a = GG(a, b, c, d, x[k + 9], S21, 0x21E1CDE6); d = GG(d, a, b, c, x[k + 14], S22, 0xC33707D6);
+    c = GG(c, d, a, b, x[k + 3], S23, 0xF4D50D87); b = GG(b, c, d, a, x[k + 8], S24, 0x455A14ED);
+    a = GG(a, b, c, d, x[k + 13], S21, 0xA9E3E905); d = GG(d, a, b, c, x[k + 2], S22, 0xFCEFA3F8);
+    c = GG(c, d, a, b, x[k + 7], S23, 0x676F02D9); b = GG(b, c, d, a, x[k + 12], S24, 0x8D2A4C8A);
+    a = HH(a, b, c, d, x[k + 5], S31, 0xFFFA3942); d = HH(d, a, b, c, x[k + 8], S32, 0x8771F681);
+    c = HH(c, d, a, b, x[k + 11], S33, 0x6D9D6122); b = HH(b, c, d, a, x[k + 14], S34, 0xFDE5380C);
+    a = HH(a, b, c, d, x[k + 1], S31, 0xA4BEEA44); d = HH(d, a, b, c, x[k + 4], S32, 0x4BDECFA9);
+    c = HH(c, d, a, b, x[k + 7], S33, 0xF6BB4B60); b = HH(b, c, d, a, x[k + 10], S34, 0xBEBFBC70);
+    a = HH(a, b, c, d, x[k + 13], S31, 0x289B7EC6); d = HH(d, a, b, c, x[k + 0], S32, 0xEAA127FA);
+    c = HH(c, d, a, b, x[k + 3], S33, 0xD4EF3085); b = HH(b, c, d, a, x[k + 6], S34, 0x04881D05);
+    a = HH(a, b, c, d, x[k + 9], S31, 0xD9D4D039); d = HH(d, a, b, c, x[k + 12], S32, 0xE6DB99E5);
+    c = HH(c, d, a, b, x[k + 15], S33, 0x1FA27CF8); b = HH(b, c, d, a, x[k + 2], S34, 0xC4AC5665);
+    a = II(a, b, c, d, x[k + 0], S41, 0xF4292244); d = II(d, a, b, c, x[k + 7], S42, 0x432AFF97);
+    c = II(c, d, a, b, x[k + 14], S43, 0xAB9423A7); b = II(b, c, d, a, x[k + 5], S44, 0xFC93A039);
+    a = II(a, b, c, d, x[k + 12], S41, 0x655B59C3); d = II(d, a, b, c, x[k + 3], S42, 0x8F0CCC92);
+    c = II(c, d, a, b, x[k + 10], S43, 0xFFEFF47D); b = II(b, c, d, a, x[k + 1], S44, 0x85845DD1);
+    a = II(a, b, c, d, x[k + 8], S41, 0x6FA87E4F); d = II(d, a, b, c, x[k + 15], S42, 0xFE2CE6E0);
+    c = II(c, d, a, b, x[k + 6], S43, 0xA3014314); b = II(b, c, d, a, x[k + 13], S44, 0x4E0811A1);
+    a = II(a, b, c, d, x[k + 4], S41, 0xF7537E82); d = II(d, a, b, c, x[k + 11], S42, 0xBD3AF235);
+    c = II(c, d, a, b, x[k + 2], S43, 0x2AD7D2BB); b = II(b, c, d, a, x[k + 9], S44, 0xEB86D391);
+    a = AddUnsigned(a, AA); b = AddUnsigned(b, BB); c = AddUnsigned(c, CC); d = AddUnsigned(d, DD);
+  }
+  return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-// ---- AliExpress TOP-style signature ----
 function aliexpressSign(params, secret) {
   const keys = Object.keys(params).sort();
   let str = secret;
