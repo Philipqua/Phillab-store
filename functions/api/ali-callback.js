@@ -103,12 +103,8 @@ function md5(string) {
   return (WordToHex(a) + WordToHex(b) + WordToHex(c) + WordToHex(d)).toLowerCase();
 }
 
-function aliexpressSign(params, secret) {
-  const keys = Object.keys(params).sort();
-  let str = secret;
-  for (const k of keys) str += k + params[k];
-  str += secret;
-  return md5(str).toUpperCase();
+function sortedConcat(params) {
+  return Object.keys(params).sort().map(k => k + params[k]).join("");
 }
 
 export async function onRequestGet(context) {
@@ -125,44 +121,48 @@ export async function onRequestGet(context) {
       });
     }
 
-    const params = {
-      app_key: appKey,
-      timestamp: String(Date.now()),
-      sign_method: "md5",
-      code: code,
-    };
-    params.sign = aliexpressSign(params, appSecret);
+    const base = { app_key: appKey, timestamp: String(Date.now()), sign_method: "md5", code };
 
-    const res = await fetch("https://api-sg.aliexpress.com/rest/auth/token/create", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams(params),
-    });
+    const variants = [
+      { name: "secret+concat+secret", fn: (c) => md5(appSecret + c + appSecret).toUpperCase() },
+      { name: "secret+concat", fn: (c) => md5(appSecret + c).toUpperCase() },
+      { name: "concat+secret", fn: (c) => md5(c + appSecret).toUpperCase() },
+    ];
 
-    const text = await res.text();
-    let data;
-    try { data = JSON.parse(text); } catch { data = { raw: text.substring(0, 500) }; }
+    const results = [];
 
-    const token = data?.access_token || data?.data?.access_token;
-    if (!token) {
-      return new Response(
-        JSON.stringify({ error: "No access_token", status: res.status, response: data }, null, 2),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
+    for (const v of variants) {
+      const params = { ...base, sign: v.fn(sortedConcat(base)) };
+      const res = await fetch("https://api-sg.aliexpress.com/rest/auth/token/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams(params),
+      });
+      const text = await res.text();
+      let data;
+      try { data = JSON.parse(text); } catch { data = { raw: text.substring(0, 300) }; }
+
+      const token = data?.access_token || data?.data?.access_token;
+      results.push({ variant: v.name, response: data });
+
+      if (token) {
+        await context.env.ALI_TOKENS.put("access_token", token);
+        await context.env.ALI_TOKENS.put("refresh_token", data?.refresh_token || data?.data?.refresh_token || "");
+        await context.env.ALI_TOKENS.put("expires_at", String(Date.now() + (data?.expires_in || 3600) * 1000));
+        return new Response(
+          `<html><body style="font-family:sans-serif;padding:40px;">
+            <h1>✅ Connected via "${v.name}"</h1>
+            <p>Tokens saved. <a href="/api/ali-products">Test products →</a></p>
+            <pre style="background:#f4f4f4;padding:16px;border-radius:8px;overflow:auto;">${JSON.stringify(data, null, 2)}</pre>
+          </body></html>`,
+          { headers: { "Content-Type": "text/html" } }
+        );
+      }
     }
 
-    await context.env.ALI_TOKENS.put("access_token", token);
-    await context.env.ALI_TOKENS.put("refresh_token", data?.refresh_token || data?.data?.refresh_token || "");
-    await context.env.ALI_TOKENS.put("expires_at", String(Date.now() + (data?.expires_in || 3600) * 1000));
-
-    return new Response(
-      `<html><body style="font-family:sans-serif;padding:40px;">
-        <h1>✅ AliExpress Connected!</h1>
-        <p>Tokens saved. <a href="/api/ali-products">Test products →</a></p>
-        <pre style="background:#f4f4f4;padding:16px;border-radius:8px;overflow:auto;">${JSON.stringify(data, null, 2)}</pre>
-      </body></html>`,
-      { headers: { "Content-Type": "text/html" } }
-    );
+    return new Response(JSON.stringify({ error: "No variant worked", results }, null, 2), {
+      status: 500, headers: { "Content-Type": "application/json" },
+    });
   } catch (err) {
     return new Response(JSON.stringify({ error: "Callback crashed", detail: err.message }), {
       status: 500, headers: { "Content-Type": "application/json" },
